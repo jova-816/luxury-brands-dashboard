@@ -1,10 +1,6 @@
-// brands.js
-// Single source of truth for portfolio brand metadata.
-// In production, this would be hydrated from SAP B1's BusinessPartner master data
-// or the Agradora_DW dim_brand table at boot.
+// Brand metadata. Logos are auto-loaded from /assets/logos/ at build time;
+// any brand without a matching file falls back to text in the sidebar.
 
-// Vite + import.meta.glob gathers any logo files dropped into /assets/logos/
-// at build time. Missing logos fall back to a name-only nav row.
 const logoModules = import.meta.glob('../assets/logos/*.{png,svg,jpg,webp}', {
   eager: true,
   query: '?url',

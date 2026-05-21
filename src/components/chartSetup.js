@@ -1,5 +1,5 @@
-// chartSetup.js
-// Register Chart.js elements once and export a brand-aware options factory.
+// Chart.js registration + a shared options factory that picks up
+// the active brand accent for tooltip borders, etc.
 
 import {
   Chart as ChartJS,
@@ -19,7 +19,6 @@ ChartJS.register(
   BarElement, ArcElement, Filler, Tooltip, Legend
 );
 
-// Default Chart.js typography to match dashboard
 ChartJS.defaults.font.family = "'Geist', system-ui, sans-serif";
 ChartJS.defaults.font.size = 11;
 ChartJS.defaults.color = '#6b6b6b';

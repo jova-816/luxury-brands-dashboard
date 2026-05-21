@@ -1,23 +1,9 @@
-// mockData.js
-//
-// ⚠️  All figures in this file are SYNTHETIC.
-//     I have no access to Luxury Brands LLC's real financials.
-//     A seeded PRNG (Mulberry32) generates 12 months of revenue, units,
-//     margin, inventory, and SKU data so the demo is stable across reloads.
-//     Brand profiles are tuned to look realistic (FHI mature, UNbrush breakout,
-//     NipNu new) but the numbers themselves are invented.
-//
-// Generates 12 months of realistic financial + operational data per brand.
-// Shape mirrors what we'd receive from:
-//   - SAP B1 Service Layer  (revenue, units, AR)
-//   - Agradora_DW.fct_daily_sales  (channel mix, COGS, margin)
-//   - Channel APIs (Amazon SP-API, TikTok Shop, Shopify) for traffic & conversion
-//
-// Deterministic seeded RNG so the demo is stable across reloads.
+// Generates 12 months of synthetic financial + ops data for each brand.
+// All numbers are fake — I don't have access to Luxury Brands' actual data.
+// Uses a seeded PRNG so the demo numbers stay stable across reloads.
 
 import { BRANDS } from './brands.js';
 
-// Mulberry32 — small deterministic PRNG. Same seed -> same numbers every render.
 function mulberry32(seed) {
   return function () {
     let t = (seed += 0x6d2b79f5);
@@ -32,10 +18,8 @@ const MONTHS = [
   'Dec 25', 'Jan 26', 'Feb 26', 'Mar 26', 'Apr 26', 'May 26'
 ];
 
-// Per-brand baseline revenue, growth rate, and channel mix.
-// These are tuned so the consolidated view shows the kind of variance
-// a real mid-market portfolio would: one mature brand declining slightly,
-// one breakout (UNbrush) growing fast, a couple stable, and one new.
+// Per-brand baselines tuned to tell a portfolio story:
+// FHI mature, Youngblood declining slightly, UNbrush breakout, NipNu new bet.
 const PROFILES = {
   fhi_heat:   { base: 2_850_000, growth: 0.018, volatility: 0.08, seed: 11, units: 18500, aov: 154 },
   prai:       { base: 1_420_000, growth: 0.004, volatility: 0.06, seed: 22, units: 24800, aov: 57  },
@@ -56,19 +40,17 @@ function generateTimeSeries(brandId) {
   const profile = PROFILES[brandId];
   const rand = mulberry32(profile.seed);
   const series = [];
-  let running = profile.base * 0.85; // start a bit below "current" to show growth
+  let running = profile.base * 0.85;
 
   for (let i = 0; i < 12; i++) {
     const noise = (rand() - 0.5) * 2 * profile.volatility;
-    const growth = 1 + profile.growth + noise;
-    running *= growth;
+    running *= 1 + profile.growth + noise;
 
-    // Seasonality: Nov/Dec lift for hair/beauty gifting; Feb/Mar dip post-holiday
-    const month = i;
+    // Holiday lift, post-holiday dip, Mother's Day bump
     let seasonal = 1;
-    if (month === 5 || month === 6) seasonal = 1.18;   // Nov/Dec
-    if (month === 8) seasonal = 0.88;                   // Feb
-    if (month === 11) seasonal = 1.05;                  // May (Mother's Day)
+    if (i === 5 || i === 6) seasonal = 1.18;
+    if (i === 8) seasonal = 0.88;
+    if (i === 11) seasonal = 1.05;
 
     const revenue = Math.round(running * seasonal);
     const units = Math.round(revenue / profile.aov);
@@ -140,8 +122,6 @@ function generateTopSkus(brandId) {
   return skuNames[brandId].map(([name, units]) => ({ name, units }));
 }
 
-// ---------- Public API (what the dashboard consumes) ----------
-
 export function getBrandData(brandId) {
   return {
     brandId,
@@ -158,9 +138,7 @@ export function getAllBrandData() {
   return out;
 }
 
-// Portfolio aggregation — this is the part that mirrors the JD's
-// "unified, multi-entity executive dashboard that aggregates data from SAP B1,
-// data warehouses, and retail/channel-specific APIs."
+// Roll up per-brand data into the portfolio view.
 export function getPortfolioData(allData) {
   const months = MONTHS.map((m, i) => {
     let revenue = 0, units = 0, grossProfit = 0;
@@ -194,7 +172,6 @@ export function getPortfolioData(allData) {
     { skuCount: 0, inStock: 0, lowStock: 0, outOfStock: 0, inventoryValue: 0, daysOnHand: 0 }
   );
 
-  // Brand contribution to current month's revenue (for stacked & pie views)
   const latestIdx = 11;
   const brandContribution = Object.keys(allData).map((bid) => ({
     brandId: bid,
@@ -207,6 +184,6 @@ export function getPortfolioData(allData) {
     timeSeries: months,
     inventory,
     brandContribution,
-    perBrandSeries: allData // keep for stacked chart
+    perBrandSeries: allData
   };
 }

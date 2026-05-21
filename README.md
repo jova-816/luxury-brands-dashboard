@@ -1,152 +1,98 @@
-# Luxury Brands Executive Dashboard
+# Luxury Brands — Executive Dashboard
 
-A multi-entity executive dashboard prototype for a mid-market beauty portfolio (five brands: hair tools, skincare, color cosmetics, hair accessories, and intimate care). Built with the stack a modern PE-backed CPG company would actually deploy.
+A prototype I built in response to the AI \& Automation Intern role at Luxury Brands LLC. It's a single-page React dashboard that aggregates revenue, units, margin, inventory, and top-SKU data across all five portfolio brands (FHI Heat, PRAI, Youngblood, UNbrush, NipNu), with a sidebar that lets you switch between a consolidated portfolio view and any individual brand.
 
-![Stack](https://img.shields.io/badge/React-18-61dafb) ![Stack](https://img.shields.io/badge/Chart.js-4-ff6384) ![Stack](https://img.shields.io/badge/Node.js-20-339933) ![Stack](https://img.shields.io/badge/Express-4-000000) ![Stack](https://img.shields.io/badge/Vite-5-646cff)
+**Live demo:** *https://luxury-brands-dashboard.vercel.app/*
 
----
+> Built with Claude as a pair-programming partner. I directed the architecture, made the design and brand decisions, debugged the deploys, and decided what stayed in and what got cut. The data is synthetic — I obviously don't have access to Luxury Brands' real numbers — but the integration layer is structured so the mock can be swapped for real SAP B1 / warehouse / channel API calls without touching the UI.
+
+\---
+
+## Stack
+
+The exact stack from the JD:
+
+* **React 18** + **Vite** — the UI
+* **Chart.js** (via `react-chartjs-2`) — line, bar, and doughnut charts
+* **Node.js** + **Express** — the API gateway (`server/index.js`)
+* Plain CSS with custom properties for theming (no Tailwind, no UI kit)
+
+\---
 
 ## What it does
 
-An executive can land on a single page and answer four questions in under ten seconds:
+Open the page and you land on the consolidated portfolio view: four KPI cards across the top (revenue, units sold, AOV, gross margin) with month-over-month deltas, a 12-month revenue line, a doughnut showing each brand's contribution to revenue, a stacked area chart, and a top-SKU leaderboard aggregated across the portfolio. Scroll down for inventory health.
 
-1. **How is the portfolio performing this month?** — consolidated revenue, units, AOV, and gross margin with month-over-month deltas.
-2. **Which brand is driving the trend?** — a stacked revenue chart and a brand-contribution doughnut break the consolidated number down by entity.
-3. **Where is inventory at risk?** — SKU health rollup (in-stock / low / out-of-stock) with inventory value and days-on-hand.
-4. **What are customers actually buying?** — top-SKU leaderboard, aggregated across the portfolio or filtered to one brand.
+Click any brand in the sidebar and the whole dashboard re-themes to that brand's accent color, the doughnut swaps out for that brand's channel mix, the SKU list filters to that brand's products, and the KPI numbers update. No page reload — everything's in memory after the initial load.
 
-The killer feature is **instant brand switching**. Click any brand in the sidebar and the entire dashboard re-themes to that brand's accent color, swaps the channel mix in for the consolidated doughnut, and reloads the SKU list and KPIs from the in-memory bundle — no network round-trip, no spinner, no relayout.
-
----
-
-## Tech choices, and why
-
-| Layer | Choice | Why |
-|---|---|---|
-| Frontend | **React 18 + Vite** | Matches the JD's core dashboard stack. Vite gives fast HMR for iteration. |
-| Charts | **Chart.js + react-chartjs-2** | Specified in the JD. Production-grade, accessible, low bundle weight. |
-| Backend | **Node.js + Express** | Specified in the JD. Acts as an API gateway over SAP B1 + the warehouse. |
-| Styling | Hand-written CSS with CSS custom properties | Brand theming is driven by `--accent` variables that React sets on the root — chart colors, hover states, focus rings, and active states all update from a single source of truth. |
-| Type | Fraunces (display) · Geist (UI) · JetBrains Mono (data) | Editorial luxury feel that fits a beauty portfolio. Tabular numerals for KPIs. |
-
----
+\---
 
 ## Architecture
 
 ```
-┌─────────────────────────────────────────────────────────┐
-│  React Dashboard  (src/)                                │
-│  ─ App orchestrates state, theme, and view              │
-│  ─ Components are pure — they receive data and render   │
-└─────────────────────────┬───────────────────────────────┘
-                          │
-                          ▼
-┌─────────────────────────────────────────────────────────┐
-│  dataService.js                                         │
-│  Single abstraction layer. Today it returns mock data.  │
-│  Tomorrow each method does `fetch('/api/...')` and the  │
-│  UI does not change.                                    │
-└─────────────────────────┬───────────────────────────────┘
-                          │
-                          ▼
-┌─────────────────────────────────────────────────────────┐
-│  Express API  (server/)                                 │
-│  GET /api/brands                                        │
-│  GET /api/brands/:id/metrics                            │
-│  GET /api/portfolio/metrics                             │
-│  POST /api/portfolio/refresh    ← manual override hook  │
-└─────────────────────────┬───────────────────────────────┘
-                          │
-   ┌──────────────────────┼──────────────────────┐
-   ▼                      ▼                      ▼
-┌─────────┐         ┌────────────┐         ┌─────────────┐
-│ SAP B1  │         │Agradora_DW │         │ Channel APIs│
-│Service  │         │materialized│         │ Amazon SP   │
-│Layer    │         │ views      │         │ TikTok Shop │
-└─────────┘         └────────────┘         └─────────────┘
-        all integrations use read-only service accounts
+React components  ──>  dataService.js  ──>  Express API  ──>  SAP B1
+                                                          ──>  Agradora\_DW
+                                                          ──>  Channel APIs
 ```
 
-**Why a separate `dataService` layer?** Because the JD specifically asks for "a pragmatic mindset focused on extending existing systems, rather than replacing them." This is the seam where SAP B1's Service Layer or a warehouse query plugs in without touching a single component.
+The point of the `dataService.js` layer is that it's the only file that knows where data comes from. Today its methods return mock data wrapped in promises. In production, each method would become a `fetch('/api/...')` call against the Express backend, which would in turn hit SAP B1's Service Layer for invoiced revenue, Agradora\_DW for warehoused/aggregated metrics, and the relevant channel APIs (Amazon SP-API, TikTok Shop, Shopify) for marketplace data.
 
----
+Nothing in the React components knows about any of that. They get clean numbers and render. That separation is what would make it cheap to actually use this with real data.
 
-## What's modeled
-
-Five brands, each with realistic profiles:
-
-- **FHI Heat** — mature, slow-growth, multi-channel (DTC, Amazon, Sephora, wholesale)
-- **PRAI Beauty** — QVC-heavy, stable, high AOV
-- **Youngblood** — pro-salon channel leader, slight decline
-- **UNbrush** — breakout brand, TikTok Shop momentum, fastest growth
-- **NipNu** — newest brand, small revenue base but +8.5% MoM growth
-
-Twelve months of revenue, units, gross margin, gross profit, channel mix, inventory health, and top SKUs are generated by a deterministic seeded PRNG so the demo is stable across reloads. Seasonality (Nov/Dec gifting lift, Feb dip, Mother's Day bump) is baked in.
-
-> **A note on the data.** All financial and operational figures in this dashboard are synthetic. I have no access to Luxury Brands LLC's real numbers, so I generated 12 months of revenue, units, margin, inventory, and top-SKU data with a seeded random number generator. The brand profiles (FHI as mature flagship, UNbrush as breakout, NipNu as new growth bet, etc.) are tuned to produce the kind of variance a real exec dashboard needs to surface — but the specific numbers are invented. Product names and channel lists come from public information (the brands' own websites). The point of this project is the *architecture*: the `dataService` layer is the single seam where real SAP B1, Agradora_DW, or channel API responses would plug in, and the UI would not change.
-
----
+\---
 
 ## Running it
 
 ```bash
 npm install
-npm run dev          # React dashboard on http://localhost:5173
-npm run server       # Express API on http://localhost:3001 (optional)
+npm run dev        # http://localhost:5173
+npm run server     # http://localhost:3001 (optional, demonstrates the API gateway)
 ```
 
-The dashboard works standalone — the Express server is included to demonstrate the integration architecture, not because the demo needs it.
+The dashboard runs standalone — the Express server is included to show the integration architecture but isn't required for the demo.
 
----
+\---
 
-## File map
+## File layout
 
 ```
-luxury-brands-dashboard/
-├── server/
-│   └── index.js                       Express API gateway
-├── src/
-│   ├── App.jsx                        Orchestrates state, theming, layout
-│   ├── main.jsx
-│   ├── components/
-│   │   ├── Sidebar.jsx                Brand selector with live status
-│   │   ├── KpiCard.jsx                Numeric KPI w/ MoM delta
-│   │   ├── RevenueTrendChart.jsx      Filled-area line chart
-│   │   ├── BrandStackedChart.jsx      Stacked area, portfolio view only
-│   │   ├── BrandContributionChart.jsx Doughnut, portfolio view only
-│   │   ├── UnitsBarChart.jsx          Monthly volume bars
-│   │   ├── ChannelMix.jsx             Sales channel breakdown
-│   │   ├── TopSkus.jsx                Best-seller leaderboard
-│   │   └── chartSetup.js              Chart.js registration + shared options
-│   ├── data/
-│   │   ├── brands.js                  Portfolio brand metadata
-│   │   ├── mockData.js                Deterministic data generator
-│   │   └── dataService.js             API abstraction layer
-│   └── styles/
-│       └── global.css                 Editorial-luxury design system
-├── index.html
-├── package.json
-└── vite.config.js
+src/
+├── App.jsx                    State + theming + layout
+├── components/
+│   ├── Sidebar.jsx            Brand selector
+│   ├── KpiCard.jsx            Big number + MoM delta
+│   ├── RevenueTrendChart.jsx  Filled-area line
+│   ├── BrandStackedChart.jsx  Stacked area (portfolio view only)
+│   ├── BrandContributionChart.jsx  Doughnut (portfolio view only)
+│   ├── UnitsBarChart.jsx
+│   ├── ChannelMix.jsx
+│   ├── TopSkus.jsx
+│   └── chartSetup.js          Chart.js registration + shared options
+├── data/
+│   ├── brands.js              Brand metadata + logo loader
+│   ├── mockData.js            Seeded data generator
+│   └── dataService.js         The integration layer
+├── assets/logos/              Brand logos (auto-detected at build time)
+└── styles/global.css
+server/
+└── index.js                   Express API gateway
 ```
 
----
+\---
 
-## Design notes
+## Notes on the data
 
-The aesthetic intentionally avoids the generic "blue admin dashboard" look. Choices that drive that:
+Twelve months of revenue, units, margin, inventory, and top-SKU data are produced by a deterministic seeded PRNG so the demo numbers stay stable across reloads. The per-brand profiles are tuned to tell a realistic portfolio story — FHI Heat as the mature flagship, UNbrush as the TikTok-driven breakout, NipNu as the new growth bet — so the consolidated view actually shows the kind of brand-mix variance an executive dashboard needs to surface. Seasonality (Nov/Dec gifting, Feb dip, Mother's Day) is baked in.
 
-- **Warm off-white background** instead of pure white — feels editorial, not corporate
-- **Serif display headings** (Fraunces) for KPI values and section titles — beauty/luxury industry signaling
-- **Monospace for all numbers** — engineering credibility, easy scanning
-- **Brand color as a single accent** per view — the data is the visual, not the chrome
-- **Staggered fade-in** on brand switch — a small thing that makes the dashboard feel alive without being noisy
+Plug real numbers into `dataService.js` and the same charts tell whatever the actual story is.
 
----
+\---
 
-## What I'd build next
+## What I'd add next
 
-- WebSocket push from the Express layer so KPIs update without a manual refresh
-- Drill-down: click a chart point to see the underlying SKUs and channels
-- Date range selector (last 7 / 30 / 90 days, YTD, custom)
-- A `/api/anomalies` endpoint that flags MoM movements outside ±2σ
-- Snapshot export to PDF for the Monday exec briefing
+* WebSocket push so the KPIs update without a manual refresh
+* Drill-down: clicking a chart point opens a SKU/channel breakdown
+* Date range picker (7d / 30d / 90d / YTD / custom)
+* An `/api/anomalies` endpoint that flags MoM movements outside ±2σ
+* SSO + role-based access (brand managers see their brand, execs see everything)
+
